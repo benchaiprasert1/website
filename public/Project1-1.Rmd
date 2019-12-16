@@ -1,0 +1,300 @@
+---
+title: 'Project 1: Exploratory Data Analysis'
+author: "SDS348 Fall 2019"
+date: "9/16/2019"
+output:
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Wrangling and Data Exploration
+
+### Instructions
+A knitted R Markdown document (as a PDF) and the raw R Markdown file (as .Rmd) should both be submitted to Canvas by 11:59pm on 10/20/2019. These two documents will be graded jointly, so they must be consistent (i.e., don’t change the R Markdown file without also updating the knitted document). Knit an html copy too, for later!
+
+I envision your written text forming something of a narrative structure around your code/output. All results presented must have corresponding code. Any answers/results/plots etc. given without the corresponding R code that generated the result will not be graded. Furthermore, all code contained in your final project document should work properly. Please do not include any extraneous code or code which produces error messages. (Code which produces warnings is acceptable, as long as you understand what the warnings mean).
+
+### Find data:
+
+Find two (!) datasets with one variable in common (e.g., dates, years, states, counties, countries), both with at least 50 observations (i.e., rows) in each. When combined, the resulting/final dataset must have **at least 4 different variables (at least 2 numeric) in addition to the common variable**.
+
+Choose as many as you would like! If you found two datasets that you like but they don't have enough variables,  find a third dataset with the same common variable and join all three.
+
+
+### Guidelines
+
+1. If the datasets are not tidy, you will need to reshape them so that every observation has its own row and every variable its own column. If the datasets are both already tidy, you will make them untidy with pivot_wider()/spread() and then tidy them again with pivot_longer/gather() to demonstrate your use of the functions. It's fine to wait until you have your descriptives to use these functions (e.g., you might want to pivot_wider() to rearrange the data to make your descriptive statistics easier to look at); it's fine long as you use them at least once!
+
+    - Depending on your datasets, it might be a good idea to do this before joining. For example, if you have a dataset you like with multiple measurements per year, but you want to join by year, you could average over your numeric variables to get means/year, do counts for your categoricals to get a counts/year, etc.
+    
+
+2. Join your 2+ separate data sources into a single dataset
+
+```{R}
+library("dplyr")
+library("tidyverse")
+library("tidyr")
+
+tidy_anime <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-04-23/tidy_anime.csv")
+
+wine_ratings <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-28/winemag-data-130k-v2.csv")
+
+tidy_anime2 <- tidy_anime %>% mutate(points = score*10) %>% select(-synopsis)
+wine_ratings2 <- wine_ratings %>% select(-X1)
+anime_wine <- tidy_anime2 %>% 
+  full_join(wine_ratings2, by="points")
+glimpse(anime_wine)
+```
+
+## Intro paragraph
+#I used a dataset detailing various stats about anime from an aggregate website that allows users to rate anime and list which ones they've watched.
+#The scoring system was 0-10 and so I multiplied it by 10 to coincide with my other dataset.
+#My other dataset was wine ratings from various raters and their twitter handles. 
+#That dataset's ratings were 0-100. 
+#Both datasets have lots of information about what type of anime it is or what type of wine it is and where it originated from. 
+#So a lot of my analysis focuses on that. 
+3. Create summary statistics
+
+```{R}
+anime_wine%>%select_if(is.numeric)%>%na.omit%>%cor
+#correlation matrix
+
+anime_wine%>% 
+  select(price, points, country, title) %>%
+  filter(country == "US")%>% arrange(desc(points))
+#best wine by rating in the US 
+
+anime_wine %>% 
+  select(members, points, studio) %>%
+  group_by(studio)%>%
+  summarize(mpoints = mean(points), mmembers = mean(members))%>%
+  arrange(desc(mpoints))
+#best anime studio by average rating 
+
+anime_wine %>% na.omit %>%  
+  select(members, points, studio) %>%
+  group_by(studio)%>%
+  summarize(mpoints = mean(points), smembers = sum(members))%>%
+  arrange(desc(smembers))
+#best anime studio by total number of people rating their anime 
+
+anime_wine %>%
+  select(price, points, title) %>% 
+  group_by(title)%>%
+  mutate(priceper = price/points) %>% 
+  arrange(priceper)
+#most bang for your buck 
+
+anime_wine %>%  
+  select(price, points, title) %>% 
+  group_by(title)%>%
+  mutate(priceper = price/points) %>% 
+  arrange(desc(priceper))
+#least bang for your buck 
+
+anime_wine%>% summarize(n_distinct(title))
+#number of wines that got rated 
+
+anime_wine%>% summarize(n_distinct(animeID))
+#number of anime in the database that got rated
+
+anime_wine%>% 
+  select(points, country) %>%
+  group_by(country)%>% 
+  summarize(mpoints = mean(points))%>%
+  arrange(desc(mpoints))
+#country with the best average rated wines 
+
+anime_wine%>% 
+  select(points, country, title) %>%
+  group_by(country, title)%>% 
+  summarize(mpoints = mean(points))%>%
+  arrange(desc(mpoints))
+#best wines on average in each country
+
+```
+## General statistics
+#A lot of the data shows which studios produce the best anime or where the best wine originates from.
+#A handful of interesting things I found were that France has the best rated wines, while England has the most amount of highly rated wines.
+#Also based on the correlation matrix, anime popularity tends to arise from expected things like how many people are rating it but also things like which studio produced it.
+
+4. Make visualizations
+
+```{r}
+ggplot(anime_wine, aes(x = price, y = points))+ 
+  geom_point(aes(color=country))+ 
+  geom_smooth(method = "lm") + 
+  coord_cartesian(ylim=c(80,105))
+#graph showing correlation between price and wine rating by country 
+
+anime_wineg<-anime_wine %>% 
+  select(members, points, studio) %>%
+  group_by(studio)%>%
+  summarize(mpoints = mean(points), mmembers = mean(members))%>%
+  arrange(desc(mpoints)) %>% 
+  top_n(10, mpoints)
+ggplot(anime_wineg, aes(x = studio, y = mpoints))+
+  geom_bar(stat="identity", fun.y="mean")+ geom_errorbar(stat="summary",fun.y = mean, fun.ymin = min, fun.ymax = max)+
+  coord_cartesian(ylim=c(65,100), xlim=c(0,1000))
+#graph showing best anime studios by average rating of anime produced
+
+```    
+##Graphs
+#The graphs I made help visualize relationships between studio and anime quality as well as price and wine rating.
+
+5. Perform k-means/PAM clustering or PCA on (at least) your numeric variables.
+
+```{r}
+aw_pca <- anime_wine%>%na.omit %>% select_if(is.numeric)%>% scale
+  aw_pca2<-prcomp(aw_pca)
+summary(aw_pca2)
+aw_pca2$x%>%as.data.frame%>%
+  ggplot(aes(PC1,PC2))+geom_point()
+
+#PCA
+
+eigvals<-aw_pca2$sdev^2
+varprop<-eigvals/sum(eigvals)
+
+
+ggplot()+geom_bar(aes(y=varprop,x=1:10),stat="identity")+xlab("")+geom_path(aes(y=varprop,x=1:10))+
+  geom_text(aes(x=1:10,y=varprop,label=round(varprop,3)),vjust=1,col="white",size=4)+
+  scale_y_continuous(breaks=seq(0,.8,.2),labels = scales::percent)+
+  scale_x_continuous(breaks=1:10)
+#visualization
+
+```    
+
+##PCA 
+#I noticed that the first two priniciple components accounted for a large margin of the correlation between my numeric variables.
+#Which is why I only used the first two PCs for my PCA. 
+#Also the visualization bar graph showed a steep drop off starting at PC3 and continuing to the point of virtually nothing at PC10.
+#The PCA showed an outlier based on the PC1 scale with most of the points clusterring around -5 and 0. 
+#While the PC2 showed much more across the board variation. 
+#A large of majority of the points cluster around the negative x and y quadrants. 
+#There is only three major sets of outliers and they're in the positive quadrants. 
+
+- For every step, you should document what your code does (in words) and what you see in the data.     
+    
+    
+### Rubric
+
+Prerequisite: Finding appropriate data from at least two sources per the instructions above: Failure to do this will result in a 0! You will submit a .Rmd file and a knitted document (pdf).
+
+#### 0. Introduction (4  pts)
+
+- Write a narrative introductory paragraph (or two) describing the datasets you have chosen, the variables they contain, how they were acquired, and why they are interesting to you. Expand on potential associations you may expect, if any.
+
+#### 1. Tidying: Rearranging Wide/Long (8 pts)
+
+- Tidy the datasets (using the `tidyr` functions `pivot_longer`/`gather` and/or `pivot_wider`/`spread`) 
+- If you data sets are already tidy, untidy them, retidy them.
+- Document the process (describe in words what was done)
+    
+#### 2. Joining/Merging (8 pts)
+
+- Join your datasets into one using a `dplyr` join function
+- If you have multiple observations on the joining variable in either dataset, fix this by collapsing via summarize
+- Discuss the process in words, including why you chose the join you did
+- Discuss which cases were dropped, if any, and potential problems with this
+
+#### 3. Wrangling (40 pts)
+
+- Use all six core `dplyr` functions in the service of generating summary statistics (18 pts)
+    - Use mutate to generate a variable that is a function of at least one other variable
+
+- Compute at least 10 different summary statistics using summarize and summarize with group_by (18 pts)
+    - At least 2 of these should group by a categorical variable. Create one by dichotomizing a numeric if necessary
+    - If applicable, at least 1 of these 5 should group by two categorical variables
+    - Strongly encouraged to create a correlation matrix with `cor()` on your numeric variables
+
+- Summarize/discuss all results in no more than two paragraphs (4 pts)
+
+
+#### 4. Visualizing (30 pts)
+
+- Create two effective, polished plots with ggplot
+
+    - Each plot should map 3+ variables to aesthetics 
+    - Each plot should have a title and clean labeling for all mappings
+    - Change at least one default theme element and color for at least one mapping per plot
+    - For at least one plot, add more tick marks (x, y, or both) than are given by default
+    - For at least one plot, use the stat="summary" function
+    - Supporting paragraph or two (for each plot) describing the relationships/trends that are apparent
+    
+#### 5. Dimensionality Reduction (20 pts) 
+
+- Either k-means/PAM clustering or PCA (inclusive "or") should be performed on at least three numeric variables in your dataset
+
+    - All relevant steps discussed in class should be included/reported
+    - A visualization of the clusters or the first few principal components (using ggplot2)
+    - Supporting paragraph or two describing results found 
+    
+
+### Where do I find data?
+
+OK, brace yourself!
+
+You can choose ANY datasets you want that meet the above criteria for variables and observations. I'm just sitting here but off the top of my head, if you are into amusement parks, you could look at amusement-park variables, including visits, and how they are impacted by weather. If you are interested in Game of Thrones, you could look at how the frequency of mentions of character names (plus other character variables) and the frequency of baby names in the US...You could even take your old Biostats data and merge in new data (e.g., based on a Google forms timestamp).
+
+You can make it as serious as you want, or not, but keep in mind that you will be incorporating this project into a portfolio webpage for your final in this course, so choose something that really reflects who you are, or something that you feel will advance you in the direction you hope to move career-wise, or something that you think is really neat. On the flip side, regardless of what you pick, you will be performing all the same tasks, so it doesn't end up being that big of a deal.
+
+If you are totally clueless and have no direction at all, log into the server and type 
+
+```{R eval=F}
+data(package = .packages(all.available = TRUE))
+```
+
+This will print out a list of **ALL datasets in ALL packages** installed on the server (a ton)! Scroll until your eyes bleed! Actually, do not scroll that much... To start with something more manageable, just run the command on your own computer, or just run `data()` to bring up the datasets in your current environment. To read more about a dataset, do `?packagename::datasetname`. 
+
+If it is easier for you, and in case you don't have many packages installed, a list of R datasets from a few common packages (also downloadable in CSV format) is given at the following website: https://vincentarelbundock.github.io/Rdatasets/datasets.html
+
+- A good package to download for fun/relevant data is `fivethiryeight`. Just run `install.packages("fivethirtyeight"), load the packages with `library(fivethirtyeight)`, run `data()`, and then scroll down to view the datasets. Here is an online list of all 127 datasets (with links to the 538 articles). Lots of sports, politics, current events, etc.
+
+- If you have already started to specialize (e.g., ecology, epidemiology) you might look at discipline-specific R packages (vegan, epi, respectively). We will be using some tools from these packages later in the course, but they come with lots of data too, which you can explore according to the directions above
+
+- However, you *emphatically DO NOT* have to use datasets available via R packages! In fact, I would much prefer it if you found the data from completely separate sources and brought them together (a much more realistic experience in the real world)! You can even reuse data from your SDS328M project, provided it shares a variable in common with other data which allows you to  merge the two together (e.g., if you still had the timestamp, you could look up the weather that day: https://www.wunderground.com/history/). If you work in a research lab or have access to old data, you could potentially merge it with new data from your lab!
+
+- Here is a curated list of interesting datasets (read-only spreadsheet format): https://docs.google.com/spreadsheets/d/1wZhPLMCHKJvwOkP4juclhjFgqIY8fQFMemwKL2c64vk/edit
+
+- Here is another great compilation of datasets: https://github.com/rfordatascience/tidytuesday
+
+- Here is the UCI Machine Learning Repository: https://archive.ics.uci.edu/ml/index.php
+
+    - See also https://en.wikipedia.org/wiki/List_of_datasets_for_machine-learning_research#Biological_data
+
+- Here is another good general place to look: https://www.kaggle.com/datasets
+
+- To help narrow your search down or to see interesting variable ideas, check out https://www.tylervigen.com/spurious-correlations. This is the spurious correlations website, and it is fun, but if you look at the bottom of each plot you will see sources for the data. This is a good place to find very general data (or at least get a sense of where you can scrape data together from)!
+
+- If you are interested in medical data, check out www.countyhealthrankings.org
+
+- If you are interested in scraping UT data, they make *loads* of data public (e.g., beyond just professor CVs and syllabi). Check out all the data that is available in the statistical handbooks: https://reports.utexas.edu/statistical-handbook
+
+##### Broader data sources:
+
+[Data.gov](www.data.gov) 186,000+ datasets!
+
+[Social Explorer](Social Explorer) is a nice interface to Census and American Community Survey data (more user-friendly than the government sites). May need to sign up for a free trial.
+
+[U.S. Bureau of Labor Statistics](www.bls.gov)
+
+[U.S. Census Bureau](www.census.gov)
+
+[Gapminder](www.gapminder.org/data), data about the world.
+
+...
+
+
+
+
+

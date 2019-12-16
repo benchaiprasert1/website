@@ -1,0 +1,514 @@
+---
+title: 'Project 1: Exploratory Data Analysis'
+author: "SDS348 Fall 2019"
+date: "9/16/2019"
+output:
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+  pdf_document:
+    toc: yes
+---
+
+
+
+<div id="data-wrangling-and-data-exploration" class="section level2">
+<h2>Data Wrangling and Data Exploration</h2>
+<div id="instructions" class="section level3">
+<h3>Instructions</h3>
+<p>A knitted R Markdown document (as a PDF) and the raw R Markdown file (as .Rmd) should both be submitted to Canvas by 11:59pm on 10/20/2019. These two documents will be graded jointly, so they must be consistent (i.e., don’t change the R Markdown file without also updating the knitted document). Knit an html copy too, for later!</p>
+<p>I envision your written text forming something of a narrative structure around your code/output. All results presented must have corresponding code. Any answers/results/plots etc. given without the corresponding R code that generated the result will not be graded. Furthermore, all code contained in your final project document should work properly. Please do not include any extraneous code or code which produces error messages. (Code which produces warnings is acceptable, as long as you understand what the warnings mean).</p>
+</div>
+<div id="find-data" class="section level3">
+<h3>Find data:</h3>
+<p>Find two (!) datasets with one variable in common (e.g., dates, years, states, counties, countries), both with at least 50 observations (i.e., rows) in each. When combined, the resulting/final dataset must have <strong>at least 4 different variables (at least 2 numeric) in addition to the common variable</strong>.</p>
+<p>Choose as many as you would like! If you found two datasets that you like but they don’t have enough variables, find a third dataset with the same common variable and join all three.</p>
+</div>
+<div id="guidelines" class="section level3">
+<h3>Guidelines</h3>
+<ol style="list-style-type: decimal">
+<li><p>If the datasets are not tidy, you will need to reshape them so that every observation has its own row and every variable its own column. If the datasets are both already tidy, you will make them untidy with pivot_wider()/spread() and then tidy them again with pivot_longer/gather() to demonstrate your use of the functions. It’s fine to wait until you have your descriptives to use these functions (e.g., you might want to pivot_wider() to rearrange the data to make your descriptive statistics easier to look at); it’s fine long as you use them at least once!</p>
+<ul>
+<li>Depending on your datasets, it might be a good idea to do this before joining. For example, if you have a dataset you like with multiple measurements per year, but you want to join by year, you could average over your numeric variables to get means/year, do counts for your categoricals to get a counts/year, etc.</li>
+</ul></li>
+<li><p>Join your 2+ separate data sources into a single dataset</p></li>
+</ol>
+<pre class="r"><code>library(&quot;dplyr&quot;)</code></pre>
+<pre><code>## 
+## Attaching package: &#39;dplyr&#39;</code></pre>
+<pre><code>## The following objects are masked from &#39;package:stats&#39;:
+## 
+##     filter, lag</code></pre>
+<pre><code>## The following objects are masked from &#39;package:base&#39;:
+## 
+##     intersect, setdiff, setequal, union</code></pre>
+<pre class="r"><code>library(&quot;tidyverse&quot;)</code></pre>
+<pre><code>## -- Attaching packages --------------------------------------------------------------- tidyverse 1.3.0 --</code></pre>
+<pre><code>## &lt;U+2713&gt; ggplot2 3.2.1     &lt;U+2713&gt; purrr   0.3.3
+## &lt;U+2713&gt; tibble  2.1.3     &lt;U+2713&gt; stringr 1.4.0
+## &lt;U+2713&gt; tidyr   1.0.0     &lt;U+2713&gt; forcats 0.4.0
+## &lt;U+2713&gt; readr   1.3.1</code></pre>
+<pre><code>## -- Conflicts ------------------------------------------------------------------ tidyverse_conflicts() --
+## x dplyr::filter() masks stats::filter()
+## x dplyr::lag()    masks stats::lag()</code></pre>
+<pre class="r"><code>library(&quot;tidyr&quot;)
+
+tidy_anime &lt;- read_csv(&quot;https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-04-23/tidy_anime.csv&quot;)</code></pre>
+<pre><code>## Parsed with column specification:
+## cols(
+##   .default = col_character(),
+##   animeID = col_double(),
+##   episodes = col_double(),
+##   airing = col_logical(),
+##   start_date = col_date(format = &quot;&quot;),
+##   end_date = col_date(format = &quot;&quot;),
+##   score = col_double(),
+##   scored_by = col_double(),
+##   rank = col_double(),
+##   popularity = col_double(),
+##   members = col_double(),
+##   favorites = col_double()
+## )</code></pre>
+<pre><code>## See spec(...) for full column specifications.</code></pre>
+<pre class="r"><code>wine_ratings &lt;- read_csv(&quot;https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-28/winemag-data-130k-v2.csv&quot;)</code></pre>
+<pre><code>## Warning: Missing column names filled in: &#39;X1&#39; [1]</code></pre>
+<pre><code>## Parsed with column specification:
+## cols(
+##   X1 = col_double(),
+##   country = col_character(),
+##   description = col_character(),
+##   designation = col_character(),
+##   points = col_double(),
+##   price = col_double(),
+##   province = col_character(),
+##   region_1 = col_character(),
+##   region_2 = col_character(),
+##   taster_name = col_character(),
+##   taster_twitter_handle = col_character(),
+##   title = col_character(),
+##   variety = col_character(),
+##   winery = col_character()
+## )</code></pre>
+<pre class="r"><code>tidy_anime2 &lt;- tidy_anime %&gt;% mutate(points = score*10) %&gt;% select(-synopsis)
+wine_ratings2 &lt;- wine_ratings %&gt;% select(-X1)
+anime_wine &lt;- tidy_anime2 %&gt;% 
+  full_join(wine_ratings2, by=&quot;points&quot;)
+glimpse(anime_wine)</code></pre>
+<pre><code>## Observations: 5,134,267
+## Variables: 40
+## $ animeID               &lt;dbl&gt; 1, 1, 1, 1, 1, 1, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,…
+## $ name                  &lt;chr&gt; &quot;Cowboy Bebop&quot;, &quot;Cowboy Bebop&quot;, &quot;Cowboy Bebop&quot;,…
+## $ title_english         &lt;chr&gt; &quot;Cowboy Bebop&quot;, &quot;Cowboy Bebop&quot;, &quot;Cowboy Bebop&quot;,…
+## $ title_japanese        &lt;chr&gt; &quot;&lt;U+30AB&gt;&lt;U+30A6&gt;&lt;U+30DC&gt;&lt;U+30FC&gt;&lt;U+30A4&gt;&lt;U+30D3&gt;&lt;U+30D0&gt;&lt;U+30C3&gt;&lt;U+30D7&gt;&quot;, &quot;&lt;U+30AB&gt;&lt;U+30A6&gt;&lt;U+30DC&gt;&lt;U+30FC&gt;&lt;U+30A4&gt;&lt;U+30D3&gt;&lt;U+30D0&gt;&lt;U+30C3&gt;&lt;U+30D7&gt;&quot;, &quot;&lt;U+30AB&gt;&lt;U+30A6&gt;&lt;U+30DC&gt;&lt;U+30FC&gt;&lt;U+30A4&gt;&lt;U+30D3&gt;&lt;U+30D0&gt;&lt;U+30C3&gt;&lt;U+30D7&gt;&quot;, &quot;&lt;U+30AB&gt;&lt;U+30A6&gt;&lt;U+30DC&gt;&lt;U+30FC&gt;&lt;U+30A4&gt;&lt;U+30D3&gt;&lt;U+30D0&gt;…
+## $ title_synonyms        &lt;chr&gt; &quot;[]&quot;, &quot;[]&quot;, &quot;[]&quot;, &quot;[]&quot;, &quot;[]&quot;, &quot;[]&quot;, &quot;[\&quot;Cowboy …
+## $ type                  &lt;chr&gt; &quot;TV&quot;, &quot;TV&quot;, &quot;TV&quot;, &quot;TV&quot;, &quot;TV&quot;, &quot;TV&quot;, &quot;Movie&quot;, &quot;M…
+## $ source                &lt;chr&gt; &quot;Original&quot;, &quot;Original&quot;, &quot;Original&quot;, &quot;Original&quot;,…
+## $ producers             &lt;chr&gt; &quot;Bandai Visual&quot;, &quot;Bandai Visual&quot;, &quot;Bandai Visua…
+## $ genre                 &lt;chr&gt; &quot;Action&quot;, &quot;Adventure&quot;, &quot;Comedy&quot;, &quot;Drama&quot;, &quot;Sci-…
+## $ studio                &lt;chr&gt; &quot;Sunrise&quot;, &quot;Sunrise&quot;, &quot;Sunrise&quot;, &quot;Sunrise&quot;, &quot;Su…
+## $ episodes              &lt;dbl&gt; 26, 26, 26, 26, 26, 26, 1, 1, 1, 1, 1, 1, 1, 1,…
+## $ status                &lt;chr&gt; &quot;Finished Airing&quot;, &quot;Finished Airing&quot;, &quot;Finished…
+## $ airing                &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE…
+## $ start_date            &lt;date&gt; 1998-04-03, 1998-04-03, 1998-04-03, 1998-04-03…
+## $ end_date              &lt;date&gt; 1999-04-02, 1999-04-02, 1999-04-02, 1999-04-02…
+## $ duration              &lt;chr&gt; &quot;24 min per ep&quot;, &quot;24 min per ep&quot;, &quot;24 min per e…
+## $ rating                &lt;chr&gt; &quot;R - 17+ (violence &amp; profanity)&quot;, &quot;R - 17+ (vio…
+## $ score                 &lt;dbl&gt; 8.81, 8.81, 8.81, 8.81, 8.81, 8.81, 8.41, 8.41,…
+## $ scored_by             &lt;dbl&gt; 405664, 405664, 405664, 405664, 405664, 405664,…
+## $ rank                  &lt;dbl&gt; 26, 26, 26, 26, 26, 26, 164, 164, 164, 164, 164…
+## $ popularity            &lt;dbl&gt; 39, 39, 39, 39, 39, 39, 449, 449, 449, 449, 449…
+## $ members               &lt;dbl&gt; 795733, 795733, 795733, 795733, 795733, 795733,…
+## $ favorites             &lt;dbl&gt; 43460, 43460, 43460, 43460, 43460, 43460, 776, …
+## $ background            &lt;chr&gt; &quot;When Cowboy Bebop first aired in spring of 199…
+## $ premiered             &lt;chr&gt; &quot;Spring 1998&quot;, &quot;Spring 1998&quot;, &quot;Spring 1998&quot;, &quot;S…
+## $ broadcast             &lt;chr&gt; &quot;Saturdays at 01:00 (JST)&quot;, &quot;Saturdays at 01:00…
+## $ related               &lt;chr&gt; &quot;{&#39;Adaptation&#39;: [{&#39;mal_id&#39;: 173, &#39;type&#39;: &#39;manga…
+## $ points                &lt;dbl&gt; 88.1, 88.1, 88.1, 88.1, 88.1, 88.1, 84.1, 84.1,…
+## $ country               &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…
+## $ description           &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…
+## $ designation           &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…
+## $ price                 &lt;dbl&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…
+## $ province              &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…
+## $ region_1              &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…
+## $ region_2              &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…
+## $ taster_name           &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…
+## $ taster_twitter_handle &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…
+## $ title                 &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…
+## $ variety               &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…
+## $ winery                &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…</code></pre>
+</div>
+</div>
+<div id="intro-paragraph" class="section level2">
+<h2>Intro paragraph</h2>
+<p>#I used a dataset detailing various stats about anime from an aggregate website that allows users to rate anime and list which ones they’ve watched.
+#The scoring system was 0-10 and so I multiplied it by 10 to coincide with my other dataset.
+#My other dataset was wine ratings from various raters and their twitter handles.
+#That dataset’s ratings were 0-100.
+#Both datasets have lots of information about what type of anime it is or what type of wine it is and where it originated from.
+#So a lot of my analysis focuses on that.
+3. Create summary statistics</p>
+<pre class="r"><code>anime_wine%&gt;%select_if(is.numeric)%&gt;%na.omit%&gt;%cor</code></pre>
+<pre><code>##                animeID    episodes       score   scored_by       rank
+## animeID     1.00000000 -0.40505636 -0.16577406 -0.31712891  0.3216125
+## episodes   -0.40505636  1.00000000  0.48426944 -0.06043608 -0.1262896
+## score      -0.16577406  0.48426944  1.00000000 -0.06731768 -0.1554908
+## scored_by  -0.31712891 -0.06043608 -0.06731768  1.00000000 -0.2725418
+## rank        0.32161251 -0.12628964 -0.15549076 -0.27254177  1.0000000
+## popularity  0.39378708 -0.15975975 -0.16560711 -0.39258194  0.9715561
+## members    -0.40788181  0.28777254  0.13126063  0.91913137 -0.3270978
+## favorites  -0.53186275  0.59373504  0.42182410  0.57344700 -0.2068228
+## points     -0.16577406  0.48426944  1.00000000 -0.06731768 -0.1554908
+## price      -0.07512899  0.21073659  0.40839324 -0.08099104 -0.0790267
+##             popularity      members  favorites      points        price
+## animeID     0.39378708 -0.407881808 -0.5318627 -0.16577406 -0.075128992
+## episodes   -0.15975975  0.287772545  0.5937350  0.48426944  0.210736590
+## score      -0.16560711  0.131260633  0.4218241  1.00000000  0.408393241
+## scored_by  -0.39258194  0.919131368  0.5734470 -0.06731768 -0.080991044
+## rank        0.97155610 -0.327097837 -0.2068228 -0.15549076 -0.079026696
+## popularity  1.00000000 -0.457385013 -0.2936989 -0.16560711 -0.075398260
+## members    -0.45738501  1.000000000  0.7667010  0.13126063  0.006411483
+## favorites  -0.29369894  0.766700960  1.0000000  0.42182410  0.146009138
+## points     -0.16560711  0.131260633  0.4218241  1.00000000  0.408393241
+## price      -0.07539826  0.006411483  0.1460091  0.40839324  1.000000000</code></pre>
+<pre class="r"><code>#correlation matrix
+
+anime_wine%&gt;% 
+  select(price, points, country, title) %&gt;%
+  filter(country == &quot;US&quot;)%&gt;% arrange(desc(points))</code></pre>
+<pre><code>## # A tibble: 2,170,356 x 4
+##    price points country title                                                   
+##    &lt;dbl&gt;  &lt;dbl&gt; &lt;chr&gt;   &lt;chr&gt;                                                   
+##  1   200    100 US      Cardinale 2006 Cabernet Sauvignon (Napa Valley)         
+##  2    80    100 US      Charles Smith 2006 Royal City Syrah (Columbia Valley (W…
+##  3   450    100 US      Verité 2007 La Muse Red (Sonoma County)                 
+##  4    80    100 US      Cayuse 2008 Bionic Frog Syrah (Walla Walla Valley (WA)) 
+##  5   200    100 US      Cardinale 2006 Cabernet Sauvignon (Napa Valley)         
+##  6    80    100 US      Charles Smith 2006 Royal City Syrah (Columbia Valley (W…
+##  7   450    100 US      Verité 2007 La Muse Red (Sonoma County)                 
+##  8    80    100 US      Cayuse 2008 Bionic Frog Syrah (Walla Walla Valley (WA)) 
+##  9   200    100 US      Cardinale 2006 Cabernet Sauvignon (Napa Valley)         
+## 10    80    100 US      Charles Smith 2006 Royal City Syrah (Columbia Valley (W…
+## # … with 2,170,346 more rows</code></pre>
+<pre class="r"><code>#best wine by rating in the US 
+
+anime_wine %&gt;% 
+  select(members, points, studio) %&gt;%
+  group_by(studio)%&gt;%
+  summarize(mpoints = mean(points), mmembers = mean(members))%&gt;%
+  arrange(desc(mpoints))</code></pre>
+<pre><code>## # A tibble: 505 x 3
+##    studio                       mpoints mmembers
+##    &lt;chr&gt;                          &lt;dbl&gt;    &lt;dbl&gt;
+##  1 Magic Bus                       90.9  142410.
+##  2 Artland                         90.8  142355.
+##  3 Sunrise                         90.1  383935.
+##  4 Bandai Namco Pictures           90.0  111491.
+##  5 Kyoto Animation                 88.6  595832.
+##  6 David Production                88.0  117664.
+##  7 Egg Firm                        86.0  168333.
+##  8 Sparkly Key Animation Studio    86.0     122.
+##  9 Shanghai Motion Magic           85       194 
+## 10 Gainax                          85.0  332667.
+## # … with 495 more rows</code></pre>
+<pre class="r"><code>#best anime studio by average rating 
+
+anime_wine %&gt;% na.omit %&gt;%  
+  select(members, points, studio) %&gt;%
+  group_by(studio)%&gt;%
+  summarize(mpoints = mean(points), smembers = sum(members))%&gt;%
+  arrange(desc(smembers))</code></pre>
+<pre><code>## # A tibble: 12 x 3
+##    studio            mpoints     smembers
+##    &lt;chr&gt;               &lt;dbl&gt;        &lt;dbl&gt;
+##  1 Sunrise              90.5 116939087069
+##  2 Madhouse             84.9  16737626136
+##  3 Manglobe             85    15780496410
+##  4 A-1 Pictures         82     2142275850
+##  5 Toei Animation       83     1110573240
+##  6 &quot;\&quot;Brains Base\&quot;&quot;    81.7    809979730
+##  7 Shaft                82      659722404
+##  8 Bones                81      457541175
+##  9 Studio Deen          82      210199648
+## 10 Production I.G       82      155034680
+## 11 Silver Link.         80      142689120
+## 12 Trans Arts           80       31825360</code></pre>
+<pre class="r"><code>#best anime studio by total number of people rating their anime 
+
+anime_wine %&gt;%
+  select(price, points, title) %&gt;% 
+  group_by(title)%&gt;%
+  mutate(priceper = price/points) %&gt;% 
+  arrange(priceper)</code></pre>
+<pre><code>## # A tibble: 5,134,267 x 4
+## # Groups:   title [118,841]
+##    price points title                                                   priceper
+##    &lt;dbl&gt;  &lt;dbl&gt; &lt;chr&gt;                                                      &lt;dbl&gt;
+##  1     4     86 Bandit NV Merlot (California)                             0.0465
+##  2     4     86 Cramele Recas 2011 UnWineD Pinot Grigio (Viile Timisul…   0.0465
+##  3     4     86 Bandit NV Merlot (California)                             0.0465
+##  4     4     86 Cramele Recas 2011 UnWineD Pinot Grigio (Viile Timisul…   0.0465
+##  5     4     86 Bandit NV Merlot (California)                             0.0465
+##  6     4     86 Cramele Recas 2011 UnWineD Pinot Grigio (Viile Timisul…   0.0465
+##  7     4     86 Bandit NV Merlot (California)                             0.0465
+##  8     4     86 Cramele Recas 2011 UnWineD Pinot Grigio (Viile Timisul…   0.0465
+##  9     4     86 Bandit NV Merlot (California)                             0.0465
+## 10     4     86 Cramele Recas 2011 UnWineD Pinot Grigio (Viile Timisul…   0.0465
+## # … with 5,134,257 more rows</code></pre>
+<pre class="r"><code>#most bang for your buck 
+
+anime_wine %&gt;%  
+  select(price, points, title) %&gt;% 
+  group_by(title)%&gt;%
+  mutate(priceper = price/points) %&gt;% 
+  arrange(desc(priceper))</code></pre>
+<pre><code>## # A tibble: 5,134,267 x 4
+## # Groups:   title [118,841]
+##    price points title                                                   priceper
+##    &lt;dbl&gt;  &lt;dbl&gt; &lt;chr&gt;                                                      &lt;dbl&gt;
+##  1  3300     88 Château les Ormes Sorbet 2013  Médoc                        37.5
+##  2  3300     88 Château les Ormes Sorbet 2013  Médoc                        37.5
+##  3  3300     88 Château les Ormes Sorbet 2013  Médoc                        37.5
+##  4  3300     88 Château les Ormes Sorbet 2013  Médoc                        37.5
+##  5  3300     88 Château les Ormes Sorbet 2013  Médoc                        37.5
+##  6  3300     88 Château les Ormes Sorbet 2013  Médoc                        37.5
+##  7  2500     96 Château Pétrus 2014  Pomerol                                26.0
+##  8  2500     96 Domaine du Comte Liger-Belair 2010  La Romanée              26.0
+##  9  2013     91 Blair 2013 Roger Rose Vineyard Chardonnay (Arroyo Seco)     22.1
+## 10  2013     91 Blair 2013 Roger Rose Vineyard Chardonnay (Arroyo Seco)     22.1
+## # … with 5,134,257 more rows</code></pre>
+<pre class="r"><code>#least bang for your buck 
+
+anime_wine%&gt;% summarize(n_distinct(title))</code></pre>
+<pre><code>## # A tibble: 1 x 1
+##   `n_distinct(title)`
+##                 &lt;int&gt;
+## 1              118841</code></pre>
+<pre class="r"><code>#number of wines that got rated 
+
+anime_wine%&gt;% summarize(n_distinct(animeID))</code></pre>
+<pre><code>## # A tibble: 1 x 1
+##   `n_distinct(animeID)`
+##                   &lt;int&gt;
+## 1                 13632</code></pre>
+<pre class="r"><code>#number of anime in the database that got rated
+
+anime_wine%&gt;% 
+  select(points, country) %&gt;%
+  group_by(country)%&gt;% 
+  summarize(mpoints = mean(points))%&gt;%
+  arrange(desc(mpoints))</code></pre>
+<pre><code>## # A tibble: 44 x 2
+##    country     mpoints
+##    &lt;chr&gt;         &lt;dbl&gt;
+##  1 England        90.6
+##  2 India          90.1
+##  3 Luxembourg     89.7
+##  4 Germany        89.4
+##  5 Austria        89.2
+##  6 China          89  
+##  7 Canada         88.9
+##  8 Morocco        88.8
+##  9 Turkey         88.6
+## 10 Switzerland    88.5
+## # … with 34 more rows</code></pre>
+<pre class="r"><code>#country with the best average rated wines 
+
+anime_wine%&gt;% 
+  select(points, country, title) %&gt;%
+  group_by(country, title)%&gt;% 
+  summarize(mpoints = mean(points))%&gt;%
+  arrange(desc(mpoints))</code></pre>
+<pre><code>## # A tibble: 118,841 x 3
+## # Groups:   country [44]
+##    country title                                                         mpoints
+##    &lt;chr&gt;   &lt;chr&gt;                                                           &lt;dbl&gt;
+##  1 France  Château Cheval Blanc 2010  Saint-Émilion                          100
+##  2 France  Château Lafite Rothschild 2010  Pauillac                          100
+##  3 France  Château Léoville Barton 2010  Saint-Julien                        100
+##  4 France  Château Léoville Las Cases 2010  Saint-Julien                     100
+##  5 France  Krug 2002 Brut  (Champagne)                                       100
+##  6 France  Louis Roederer 2008 Cristal Vintage Brut  (Champagne)             100
+##  7 France  Salon 2006 Le Mesnil Blanc de Blancs Brut Chardonnay (Champa…     100
+##  8 Italy   Avignonesi 1995 Occhio di Pernice  (Vin Santo di Montepulcia…     100
+##  9 Italy   Biondi Santi 2010 Riserva  (Brunello di Montalcino)               100
+## 10 Italy   Casanova di Neri 2007 Cerretalto  (Brunello di Montalcino)        100
+## # … with 118,831 more rows</code></pre>
+<pre class="r"><code>#best wines on average in each country</code></pre>
+</div>
+<div id="general-statistics" class="section level2">
+<h2>General statistics</h2>
+<p>#A lot of the data shows which studios produce the best anime or where the best wine originates from.
+#A handful of interesting things I found were that France has the best rated wines, while England has the most amount of highly rated wines.
+#Also based on the correlation matrix, anime popularity tends to arise from expected things like how many people are rating it but also things like which studio produced it.</p>
+<ol start="4" style="list-style-type: decimal">
+<li>Make visualizations</li>
+</ol>
+<pre class="r"><code>ggplot(anime_wine, aes(x = price, y = points))+ 
+  geom_point(aes(color=country))+ 
+  geom_smooth(method = &quot;lm&quot;) + 
+  coord_cartesian(ylim=c(80,105))</code></pre>
+<pre><code>## Warning: Removed 389580 rows containing non-finite values (stat_smooth).</code></pre>
+<pre><code>## Warning: Removed 389580 rows containing missing values (geom_point).</code></pre>
+<p><img src="/Project1-1_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<pre class="r"><code>#graph showing correlation between price and wine rating by country 
+
+anime_wineg&lt;-anime_wine %&gt;% 
+  select(members, points, studio) %&gt;%
+  group_by(studio)%&gt;%
+  summarize(mpoints = mean(points), mmembers = mean(members))%&gt;%
+  arrange(desc(mpoints)) %&gt;% 
+  top_n(10, mpoints)
+ggplot(anime_wineg, aes(x = studio, y = mpoints))+
+  geom_bar(stat=&quot;identity&quot;, fun.y=&quot;mean&quot;)+ geom_errorbar(stat=&quot;summary&quot;,fun.y = mean, fun.ymin = min, fun.ymax = max)+
+  coord_cartesian(ylim=c(65,100), xlim=c(0,1000))</code></pre>
+<pre><code>## Warning: Ignoring unknown parameters: fun.y</code></pre>
+<p><img src="/Project1-1_files/figure-html/unnamed-chunk-3-2.png" width="672" /></p>
+<pre class="r"><code>#graph showing best anime studios by average rating of anime produced</code></pre>
+<p>##Graphs
+#The graphs I made help visualize relationships between studio and anime quality as well as price and wine rating.</p>
+<ol start="5" style="list-style-type: decimal">
+<li>Perform k-means/PAM clustering or PCA on (at least) your numeric variables.</li>
+</ol>
+<pre class="r"><code>aw_pca &lt;- anime_wine%&gt;%na.omit %&gt;% select_if(is.numeric)%&gt;% scale
+  aw_pca2&lt;-prcomp(aw_pca)
+summary(aw_pca2)</code></pre>
+<pre><code>## Importance of components:
+##                           PC1    PC2     PC3     PC4     PC5     PC6     PC7
+## Standard deviation     2.0489 1.8767 0.99135 0.96199 0.50062 0.29869 0.16568
+## Proportion of Variance 0.4198 0.3522 0.09828 0.09254 0.02506 0.00892 0.00275
+## Cumulative Proportion  0.4198 0.7720 0.87025 0.96280 0.98786 0.99678 0.99952
+##                            PC8     PC9      PC10
+## Standard deviation     0.06424 0.02502 1.855e-12
+## Proportion of Variance 0.00041 0.00006 0.000e+00
+## Cumulative Proportion  0.99994 1.00000 1.000e+00</code></pre>
+<pre class="r"><code>aw_pca2$x%&gt;%as.data.frame%&gt;%
+  ggplot(aes(PC1,PC2))+geom_point()</code></pre>
+<p><img src="/Project1-1_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<pre class="r"><code>#PCA
+
+eigvals&lt;-aw_pca2$sdev^2
+varprop&lt;-eigvals/sum(eigvals)
+
+
+ggplot()+geom_bar(aes(y=varprop,x=1:10),stat=&quot;identity&quot;)+xlab(&quot;&quot;)+geom_path(aes(y=varprop,x=1:10))+
+  geom_text(aes(x=1:10,y=varprop,label=round(varprop,3)),vjust=1,col=&quot;white&quot;,size=4)+
+  scale_y_continuous(breaks=seq(0,.8,.2),labels = scales::percent)+
+  scale_x_continuous(breaks=1:10)</code></pre>
+<p><img src="/Project1-1_files/figure-html/unnamed-chunk-4-2.png" width="672" /></p>
+<pre class="r"><code>#visualization</code></pre>
+<p>##PCA
+#I noticed that the first two priniciple components accounted for a large margin of the correlation between my numeric variables.
+#Which is why I only used the first two PCs for my PCA.
+#Also the visualization bar graph showed a steep drop off starting at PC3 and continuing to the point of virtually nothing at PC10.
+#The PCA showed an outlier based on the PC1 scale with most of the points clusterring around -5 and 0.
+#While the PC2 showed much more across the board variation.
+#A large of majority of the points cluster around the negative x and y quadrants.
+#There is only three major sets of outliers and they’re in the positive quadrants.</p>
+<ul>
+<li>For every step, you should document what your code does (in words) and what you see in the data.</li>
+</ul>
+<div id="rubric" class="section level3">
+<h3>Rubric</h3>
+<p>Prerequisite: Finding appropriate data from at least two sources per the instructions above: Failure to do this will result in a 0! You will submit a .Rmd file and a knitted document (pdf).</p>
+<div id="introduction-4-pts" class="section level4">
+<h4>0. Introduction (4 pts)</h4>
+<ul>
+<li>Write a narrative introductory paragraph (or two) describing the datasets you have chosen, the variables they contain, how they were acquired, and why they are interesting to you. Expand on potential associations you may expect, if any.</li>
+</ul>
+</div>
+<div id="tidying-rearranging-widelong-8-pts" class="section level4">
+<h4>1. Tidying: Rearranging Wide/Long (8 pts)</h4>
+<ul>
+<li>Tidy the datasets (using the <code>tidyr</code> functions <code>pivot_longer</code>/<code>gather</code> and/or <code>pivot_wider</code>/<code>spread</code>)</li>
+<li>If you data sets are already tidy, untidy them, retidy them.</li>
+<li>Document the process (describe in words what was done)</li>
+</ul>
+</div>
+<div id="joiningmerging-8-pts" class="section level4">
+<h4>2. Joining/Merging (8 pts)</h4>
+<ul>
+<li>Join your datasets into one using a <code>dplyr</code> join function</li>
+<li>If you have multiple observations on the joining variable in either dataset, fix this by collapsing via summarize</li>
+<li>Discuss the process in words, including why you chose the join you did</li>
+<li>Discuss which cases were dropped, if any, and potential problems with this</li>
+</ul>
+</div>
+<div id="wrangling-40-pts" class="section level4">
+<h4>3. Wrangling (40 pts)</h4>
+<ul>
+<li>Use all six core <code>dplyr</code> functions in the service of generating summary statistics (18 pts)
+<ul>
+<li>Use mutate to generate a variable that is a function of at least one other variable</li>
+</ul></li>
+<li>Compute at least 10 different summary statistics using summarize and summarize with group_by (18 pts)
+<ul>
+<li>At least 2 of these should group by a categorical variable. Create one by dichotomizing a numeric if necessary</li>
+<li>If applicable, at least 1 of these 5 should group by two categorical variables</li>
+<li>Strongly encouraged to create a correlation matrix with <code>cor()</code> on your numeric variables</li>
+</ul></li>
+<li>Summarize/discuss all results in no more than two paragraphs (4 pts)</li>
+</ul>
+</div>
+<div id="visualizing-30-pts" class="section level4">
+<h4>4. Visualizing (30 pts)</h4>
+<ul>
+<li><p>Create two effective, polished plots with ggplot</p>
+<ul>
+<li>Each plot should map 3+ variables to aesthetics</li>
+<li>Each plot should have a title and clean labeling for all mappings</li>
+<li>Change at least one default theme element and color for at least one mapping per plot</li>
+<li>For at least one plot, add more tick marks (x, y, or both) than are given by default</li>
+<li>For at least one plot, use the stat=“summary” function</li>
+<li>Supporting paragraph or two (for each plot) describing the relationships/trends that are apparent</li>
+</ul></li>
+</ul>
+</div>
+<div id="dimensionality-reduction-20-pts" class="section level4">
+<h4>5. Dimensionality Reduction (20 pts)</h4>
+<ul>
+<li><p>Either k-means/PAM clustering or PCA (inclusive “or”) should be performed on at least three numeric variables in your dataset</p>
+<ul>
+<li>All relevant steps discussed in class should be included/reported</li>
+<li>A visualization of the clusters or the first few principal components (using ggplot2)</li>
+<li>Supporting paragraph or two describing results found</li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="where-do-i-find-data" class="section level3">
+<h3>Where do I find data?</h3>
+<p>OK, brace yourself!</p>
+<p>You can choose ANY datasets you want that meet the above criteria for variables and observations. I’m just sitting here but off the top of my head, if you are into amusement parks, you could look at amusement-park variables, including visits, and how they are impacted by weather. If you are interested in Game of Thrones, you could look at how the frequency of mentions of character names (plus other character variables) and the frequency of baby names in the US…You could even take your old Biostats data and merge in new data (e.g., based on a Google forms timestamp).</p>
+<p>You can make it as serious as you want, or not, but keep in mind that you will be incorporating this project into a portfolio webpage for your final in this course, so choose something that really reflects who you are, or something that you feel will advance you in the direction you hope to move career-wise, or something that you think is really neat. On the flip side, regardless of what you pick, you will be performing all the same tasks, so it doesn’t end up being that big of a deal.</p>
+<p>If you are totally clueless and have no direction at all, log into the server and type</p>
+<pre class="r"><code>data(package = .packages(all.available = TRUE))</code></pre>
+<p>This will print out a list of <strong>ALL datasets in ALL packages</strong> installed on the server (a ton)! Scroll until your eyes bleed! Actually, do not scroll that much… To start with something more manageable, just run the command on your own computer, or just run <code>data()</code> to bring up the datasets in your current environment. To read more about a dataset, do <code>?packagename::datasetname</code>.</p>
+<p>If it is easier for you, and in case you don’t have many packages installed, a list of R datasets from a few common packages (also downloadable in CSV format) is given at the following website: <a href="https://vincentarelbundock.github.io/Rdatasets/datasets.html" class="uri">https://vincentarelbundock.github.io/Rdatasets/datasets.html</a></p>
+<ul>
+<li><p>A good package to download for fun/relevant data is <code>fivethiryeight</code>. Just run <code>install.packages("fivethirtyeight"), load the packages with</code>library(fivethirtyeight)<code>, run</code>data()`, and then scroll down to view the datasets. Here is an online list of all 127 datasets (with links to the 538 articles). Lots of sports, politics, current events, etc.</p></li>
+<li><p>If you have already started to specialize (e.g., ecology, epidemiology) you might look at discipline-specific R packages (vegan, epi, respectively). We will be using some tools from these packages later in the course, but they come with lots of data too, which you can explore according to the directions above</p></li>
+<li><p>However, you <em>emphatically DO NOT</em> have to use datasets available via R packages! In fact, I would much prefer it if you found the data from completely separate sources and brought them together (a much more realistic experience in the real world)! You can even reuse data from your SDS328M project, provided it shares a variable in common with other data which allows you to merge the two together (e.g., if you still had the timestamp, you could look up the weather that day: <a href="https://www.wunderground.com/history/" class="uri">https://www.wunderground.com/history/</a>). If you work in a research lab or have access to old data, you could potentially merge it with new data from your lab!</p></li>
+<li><p>Here is a curated list of interesting datasets (read-only spreadsheet format): <a href="https://docs.google.com/spreadsheets/d/1wZhPLMCHKJvwOkP4juclhjFgqIY8fQFMemwKL2c64vk/edit" class="uri">https://docs.google.com/spreadsheets/d/1wZhPLMCHKJvwOkP4juclhjFgqIY8fQFMemwKL2c64vk/edit</a></p></li>
+<li><p>Here is another great compilation of datasets: <a href="https://github.com/rfordatascience/tidytuesday" class="uri">https://github.com/rfordatascience/tidytuesday</a></p></li>
+<li><p>Here is the UCI Machine Learning Repository: <a href="https://archive.ics.uci.edu/ml/index.php" class="uri">https://archive.ics.uci.edu/ml/index.php</a></p>
+<ul>
+<li>See also <a href="https://en.wikipedia.org/wiki/List_of_datasets_for_machine-learning_research#Biological_data" class="uri">https://en.wikipedia.org/wiki/List_of_datasets_for_machine-learning_research#Biological_data</a></li>
+</ul></li>
+<li><p>Here is another good general place to look: <a href="https://www.kaggle.com/datasets" class="uri">https://www.kaggle.com/datasets</a></p></li>
+<li><p>To help narrow your search down or to see interesting variable ideas, check out <a href="https://www.tylervigen.com/spurious-correlations" class="uri">https://www.tylervigen.com/spurious-correlations</a>. This is the spurious correlations website, and it is fun, but if you look at the bottom of each plot you will see sources for the data. This is a good place to find very general data (or at least get a sense of where you can scrape data together from)!</p></li>
+<li><p>If you are interested in medical data, check out www.countyhealthrankings.org</p></li>
+<li><p>If you are interested in scraping UT data, they make <em>loads</em> of data public (e.g., beyond just professor CVs and syllabi). Check out all the data that is available in the statistical handbooks: <a href="https://reports.utexas.edu/statistical-handbook" class="uri">https://reports.utexas.edu/statistical-handbook</a></p></li>
+</ul>
+<div id="broader-data-sources" class="section level5">
+<h5>Broader data sources:</h5>
+<p><a href="www.data.gov">Data.gov</a> 186,000+ datasets!</p>
+<p><a href="Social%20Explorer">Social Explorer</a> is a nice interface to Census and American Community Survey data (more user-friendly than the government sites). May need to sign up for a free trial.</p>
+<p><a href="www.bls.gov">U.S. Bureau of Labor Statistics</a></p>
+<p><a href="www.census.gov">U.S. Census Bureau</a></p>
+<p><a href="www.gapminder.org/data">Gapminder</a>, data about the world.</p>
+<p>…</p>
+</div>
+</div>
+</div>

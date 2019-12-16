@@ -1,0 +1,293 @@
+---
+title: 'Project 2: Modeling, Testing, and Predicting by Ben Chaiprasert (bc32544)'
+author: "SDS348 Fall 2019"
+date: ''
+output:
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+hook_output = knit_hooks$get('output')
+knit_hooks$set(output = function(x, options) {
+  # this hook is used only when the linewidth option is not NULL
+  if (!is.null(n <- options$linewidth)) {
+    x = knitr:::split_lines(x)
+    # any lines wider than n should be wrapped
+    if (any(nchar(x) > n)) x = strwrap(x, width = n)
+    x = paste(x, collapse = '\n')
+  }
+  hook_output(x, options)
+})
+
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE,fig.align="center",warning=FALSE,message=FALSE,fig.width=8, fig.height=5, linewidth=60)
+options(tibble.width = 100,width = 100)
+library(tidyverse)
+```
+
+# Modeling
+
+## Instructions
+
+A knitted R Markdown document (as a PDF) and the raw R Markdown file (as .Rmd) should both be submitted to Canvas by 11:59pm on 11/24/2019. These two documents will be graded jointly, so they must be consistent (i.e., don’t change the R Markdown file without also updating the knitted document). Knit an html copy too, for later! In the .Rmd file for Project 2, you can copy the first code-chunk into your project .Rmd file to get better formatting. Notice that you can adjust the opts_chunk$set(...) above to set certain parameters if necessary to make the knitting cleaner (you can globally set the size of all plots, etc). I have gone ahead and set a few for you (such as disabling warnings and package-loading messges when knitting)! 
+
+Like before, I envision your written text forming something of a narrative structure around your code/output. All results presented must have corresponding code. Any answers/results/plots etc. given without the corresponding R code that generated the result will not be graded. Furthermore, all code contained in your final project document should work properly. Please do not include any extraneous code or code which produces error messages. (Code which produces warnings is acceptable, as long as you understand what the warnings mean).
+
+## Find data:
+
+Find one dataset with at least 5 variables that wish to use to build model. At least one should be categorical (with 2-5 groups) and at least two should be numeric. Ideally, one of your variables will be binary (if not, you will need to create one by discretizing a numeric, which is workable but less than ideal). You will need a minimum of 40 observations (*at least* 10 observations for every explanatory variable you have, ideally 20+ observations/variable).
+
+It is perfectly fine to use either dataset (or the merged dataset, or a subset of your variables) from Project 1. However, you could also diversify your portfolio a bit by choosing a different dataset to work with (particularly if the variables did not reveal interesting associations in Project 1). The only requirement/restriction is that you may not use data from any examples we have done in class or lab. It would be a good idea to pick more cohesive data this time around (i.e., variables that you actually thing might have a relationship you would want to test). Think more along the lines of your Biostats project.
+
+Again, you can use data from anywhere you want (see bottom for resources)! If you want a quick way to see whether a built-in (R) dataset has binary and/or character (i.e., categorical) variables, check out this list: https://vincentarelbundock.github.io/Rdatasets/datasets.html.
+
+```{R}
+class_diag<-function(probs,truth){
+ tab<-table(factor(probs>.5,levels=c("FALSE","TRUE")),truth)
+ acc=sum(diag(tab))/sum(tab)
+ sens=tab[2,2]/colSums(tab)[2]
+ spec=tab[1,1]/colSums(tab)[1]
+ ppv=tab[2,2]/rowSums(tab)[2]
+ if(is.numeric(truth)==FALSE & is.logical(truth)==FALSE) truth<-as.numeric(truth)-1
+
+ ord<-order(probs, decreasing=TRUE)
+ probs <- probs[ord]; truth <- truth[ord]
+ TPR=cumsum(truth)/max(1,sum(truth))
+ FPR=cumsum(!truth)/max(1,sum(!truth))
+ dup<-c(probs[-1]>=probs[-length(probs)], FALSE)
+ TPR<-c(0,TPR[!dup],1); FPR<-c(0,FPR[!dup],1)
+ n <- length(TPR)
+ auc<- sum( ((TPR[-1]+TPR[-n])/2) * (FPR[-1]-FPR[-n]) )
+ data.frame(acc,sens,spec,ppv,auc)
+} 
+library(fivethirtyeight)
+library(plotROC)
+library(dplyr)
+library(MASS)
+library(lmtest)
+library(boot)
+library(glmnet)
+library(ggplot2)
+library(sandwich)
+hate_crimes <- view(hate_crimes)
+```
+## Guidelines and Rubric
+
+- **0. (5 pts)** Introduce your dataset and each of your variables (or just your main variables if you have lots) in a paragraph.
+
+*I selected a dataset depicting the rate of hate crimes across the states in the United States along with other data that could be correlated to hate crime rate. State and state_abbrev are exactly as they say they are. Median_house_inc is median household income, while all the share variables are share of the population that is inserted at the end of the variable name. For example, share_pop_metro is the share of the population that lives in a metropolitan area. Gini_index is simply the gini index for that state. Hate_crimes_per_100k_splc is hate crimes occurence per 100,000 population, and avg_hatecrimes_per_100k_fbi is the average annual hate crimes per 100,000 population according to FBI data collected in 2010-2015.*
+
+- **1. (15 pts)** Perform a MANOVA testing whether any of your numeric variables (or a subset of them, if including them all doesn't make sense) show a mean difference across levels of one of your categorical variables (3). If they do, perform univariate ANOVAs to find response(s) showing a mean difference across groups (3), and perform post-hoc t tests to find which groups differ (3). Discuss the number of tests you have performed, calculate the probability of at least one type I error (if unadjusted), and adjust the significance level accordingly (bonferroni correction) before discussing significant differences (3). Briefly discuss assumptions and whether or not they are likely to have been met (2).
+
+```{R}
+hate_crimes <- hate_crimes%>% na.omit
+hate_crimes$highcr <- ifelse(hate_crimes$avg_hatecrimes_per_100k_fbi > 2.367613, 1, 0)
+
+ggplot(hate_crimes, aes(x = share_non_citizen, y = share_vote_trump)) +
+  geom_point(alpha = .5) + geom_density_2d(h=2) + coord_fixed() + facet_wrap(~highcr)
+
+ggplot(hate_crimes, aes(x = share_pop_hs, y = gini_index)) +
+  geom_point(alpha = .5) + geom_density_2d(h=2) + coord_fixed() + facet_wrap(~highcr)
+#based on these graphs of some variables, I think the assumption of multivariate normality is met
+
+covmats<-hate_crimes%>%na.omit%>%group_by(highcr)%>%do(covs=cov(.[3:11]))
+for(i in 1:3){print(covmats$covs[i])}
+#I think the assumptions of homogeneity of variances is met 
+
+man1<-manova(cbind(median_house_inc, share_unemp_seas, share_pop_metro, gini_index, share_pop_hs, share_non_citizen, share_white_poverty, share_vote_trump)~highcr, data=hate_crimes)
+summary(man1)
+summary.aov(man1)
+#the manova test shows that means for each group in the test are not significantly different across high vs low crime rate areas
+#since the manova test didn't find significant differences across groups, I only performed one test meaning the probabilitiy of a Type 1 error is 0.05/1 which is still 0.05. The significance of the values doesn't change because the bonferroni correction didn't change the alpha value. 
+
+```
+
+*A one-way multivariate analysis of variance (MANOVA) was conducted to determine the effect of the high hate crime rate (high and low) on several dependent variables (median household income, unemployed population proportion, proportion of the population living in a metropolitian area, proportion of population 25+ with a high-school degree, amount of non-citizens, gini index and proportion of non-white individuals). Examination of bivariate density plots for each group revealed no stark deparures from multivariate normality. Examination of covariance matricies for each group revealed relative homogeneity. No univariate or multivariate outliers were evident and MANOVA was considered to be an appropriate analysis technique. No significant differences were found across high vs low crime rate areas. *
+
+- **2. (10 pts)** Perform some kind of randomization test on your data (that makes sense). This can be anything you want! State null and alternative hypotheses, perform the test, and interpret the results (7). Create a plot visualizing the null distribution and the test statistic (3).
+
+```{R}
+hate_crimes%>%na.omit%>%group_by(highcr)%>%summarize(s=sd(gini_index))%>%summarize(diff(s))
+
+rand_dist<-vector()
+for(i in 1:5000){
+new<-data.frame(gini_index=sample(hate_crimes$gini_index),highcr=hate_crimes$highcr)
+rand_dist[i]<-sd(new[new$highcr=="1",]$gini_index)-
+ sd(new[new$highcr=="0",]$gini_index)
+}
+mean(rand_dist< 0.01074849)*2
+
+#Ho = gini index is the same for whether the area was high hate crime rate vs low hate crime rate
+#Ha = gini index is different for whether the area was high hate crime rate vs low hate crime rate
+ 
+hist(rand_dist,main="kajdsfl",ylab="asdfaf"); abline(v = 0.01074849,col="red")
+#based on the results shown in the graph, the null is rejected since a majority of the graph lies below the red line which is the p-value line
+```
+- **3. (35 pts)** Build a linear regression model predicting one of your response variables from at least 2 other variables, including their interaction. Mean-center any numeric variables involved in the interaction.
+
+```{R}
+
+hate_crimes_centered <- hate_crimes %>% na.omit %>% mutate(ginicenter = gini_index - mean(gini_index), unempcenter = share_unemp_seas - mean(share_unemp_seas), hccenter = avg_hatecrimes_per_100k_fbi- mean(avg_hatecrimes_per_100k_fbi))
+
+
+fitint <- lm(hccenter~ginicenter*unempcenter, data= hate_crimes_centered)
+summary(fitint)
+#42.49% of the variation is explained by the interaction model 
+
+resids<-fitint$residuals
+fitted<-fitint$fitted.values
+
+qplot(x = ginicenter, y = hccenter, color = unempcenter, data = hate_crimes_centered) +
+  stat_smooth(method = "lm", se = FALSE, fullrange = TRUE)
+
+ggplot()+geom_point(aes(fitted,resids))+geom_hline(yintercept=0, color='red')
+ggplot()+geom_qq(aes(sample=resids))+geom_qq_line()
+ggplot()+geom_histogram(aes(resids), bins=20)
+#assumptions met
+
+coeftest(fitint, vcov=vcovHC(fitint))[,1:2]
+#this resulted in the same coefficients as the first model, but the standard errors were wildly different with this new model drastically increasing for the interaction effect 
+
+fit<-lm(hccenter~ginicenter+unempcenter, data= hate_crimes_centered)
+summary(fit)
+#the model without interaction has a lot of difference in coefficients since the interaction model attributed a lot of the variance to the interaction effect 
+
+```
+
+    - Interpret the coefficient estimates (do not discuss significance) (10)
+    - Plot the regression using `ggplot()`. If your interaction is numeric by numeric, refer to code near the end of WS15 to make the plot. If you have 3 or more predictors, just chose two to plot for convenience. (7)
+    - Check assumptions of linearity, normality, and homoskedasticity either graphically or using a hypothesis test (3)
+    - Regardless, recompute regression results with robust standard errors via `coeftest(..., vcov=vcovHC(...))`. Discuss significance of results, including any changes from before/after robust SEs if applicable. (7)
+    - What proportion of the variation in the outcome does your model explain? (3)
+    - Finally, rerun the regression but without interactions (just main effects); compare this with the interaction model and the null model using a likelihood ratio test (4)
+
+- **4. (5 pts)** Rerun same regression model (with interaction), but this time compute bootstrapped standard errors. Discuss any changes you observe in SEs and p-values using these SEs compared to the original SEs and the robust SEs)
+
+```{R}
+
+
+resid_resamp<-replicate(5000,{
+  new_resids<-sample(resids,replace=TRUE) #resample resids w/ replacement
+  hate_crimes_centered$new_y<-fitted+new_resids #add new resids to yhats to get new "data"
+  fitnew<-lm(new_y~ginicenter*unempcenter,data=hate_crimes_centered) #refit model
+  coef(fitnew) #save coefficient estimates (b0, b1, etc)
+})
+
+resid_resamp%>%t%>%as.data.frame%>%summarize_all(sd)
+
+```
+*the bootstrapped SE's are different from the original and robust SE's though not by a huge margin. Interestingly, the bootstrapped SE's fall between the original SE's and robust SE's. *
+
+- **5. (40 pts)** Perform a logistic regression predicting a binary categorical variable (if you don't have one, make/get one) from at least two explanatory variables (interaction not necessary). 
+
+    - Interpret coefficient estimates in context (10)
+    - Report a confusion matrix for your logistic regression (2)
+    - Compute and discuss the Accuracy, Sensitivity (TPR), Specificity (TNR), and Recall (PPV) of your model (5)
+    - Using ggplot, plot density of log-odds (logit) by your binary outcome variable (3)
+    - Generate an ROC curve (plot) and calculate AUC (either manually or with a package); interpret (10)
+    - Perform 10-fold (or repeated random sub-sampling) CV and report average out-of-sample Accuracy, Sensitivity, and Recall (10)
+
+```{R}
+
+#fitlm <- lm(formula = highcr ~ share_unemp_seas+share_vote_trump, data = hate_crimes, family=binomial(link="logit"))
+#summary(fitlm)
+#If an area has a 0% of unemployment and trump voters, then odds of the area being a high hate crime area is 3.861285
+#Every one-unit increase in proportion of unemployed multiplies the odds of the area being a high hate crime area by 0.001806074
+#Every one-unit increase in proportion of trump voters multiplies the odds of the area being a high hate crime area by 0.2707119
+
+#hate_crimes$prob<-predict(fitlm,type="response") 
+#table(predict=as.numeric(hate_crimes$prob>.5),truth=hate_crimes$highcr)%>%addmargins
+
+8/18
+#sensitivity is 0.4444, which is very low 
+23/27
+#specificity is 0.8519, which is very high compared to the true positive rate
+8/12
+#precision is 0.6667
+31/45
+#accuracy is 0.6889
+#overall the model doesn't perform horribly in terms of prediction as the specificity and accuracy are fine; however, the true positive rate leaves something to be desired
+
+#ROCplot<-ggplot(hate_crimes)+geom_roc(aes(d=highcr,m=prob), n.cuts=0) 
+#ROCplot
+#calc_auc(ROCplot)
+#Based on the AUC value of 0.6893004, the model predicts poorly and not much better than chance which is 0.5
+
+#hate_crimes$logit<-predict(fitlm,family=binomial(link="logit"))
+
+#ggplot(hate_crimes)+geom_density(aes(logit,color=highcr, fill=highcr), alpha=.4)+
+  #theme(legend.position=c(.8,2))+geom_vline(xintercept=0)+xlab("predictor (logit)")
+
+#class_diag(hate_crimes$prob,hate_crimes$highcr)
+
+#set.seed(1234)
+#k=10 
+#data1<-hate_crimes[sample(nrow(hate_crimes)),] 
+#folds<-cut(seq(1:nrow(hate_crimes)),breaks=k,labels=F) 
+#diags<-NULL
+#for(i in 1:k){
+ 
+ #train<-data1[folds!=i,]
+ #test<-data1[folds==i,]
+ #truth<-test$highcr
+ 
+ #fitcv<-glm(highcr~share_unemp_seas+share_vote_trump,data=train,family="binomial")
+ #probs<-predict(fitcv,newdata = test,type="response")
+
+ #diags<-rbind(diags,class_diag(probs,truth))
+#}
+
+#apply(diags,2,mean) 
+#accuracy is 0.645
+#sensitivity is 0.350
+#specificity is 0.85
+#AUC is 0.625
+```
+
+- **6. (10 pts)** Choose one variable you want to predict (can be one you used from before; either binary or continuous) and run a LASSO regression inputting all the rest of your variables as predictors. Choose lambda to give the simplest model whose accuracy is near that of the best (i.e., `lambda.1se`). Discuss which variables are retained. Perform 10-fold CV using this model: if response in binary, compare model's out-of-sample accuracy to that of your logistic regression in part 5; if response is numeric, compare the residual standard error (at the bottom of the summary output, aka RMSE): lower is better fit!
+
+```{R}
+
+#y<-as.matrix(hate_crimes$highcr)
+#x<-hate_crimes%>%dplyr::select(median_house_inc, share_unemp_seas, share_pop_metro, share_pop_hs, share_non_citizen, share_white_poverty, share_non_white, share_vote_trump, gini_index, hate_crimes_per_100k_splc, avg_hatecrimes_per_100k_fbi)%>%mutate_all(scale)%>%as.matrix
+#cv<-cv.glmnet(x,y) 
+#lasso1<-glmnet(x,y,lambda=cv$lambda)
+#coef(lasso1)
+
+#class_diag(hate_crimes$prob,hate_crimes$highcr)
+
+#set.seed(1234)
+#k=10 
+#data2<-hate_crimes[sample(nrow(hate_crimes)),] 
+#folds<-cut(seq(1:nrow(hate_crimes)),breaks=k,labels=F) 
+#diags<-NULL
+#for(i in 1:k){
+ 
+ #train2<-data2[folds!=i,]
+ #test2<-data2[folds==i,]
+ #truth<-test2$highcr
+ 
+ #fitcvl<-glm(highcr~share_unemp_seas+share_non_citizen,data=train,family="binomial")
+ #probs<-predict(fitcvl,newdata = test2,type="response")
+
+ #diags2<-rbind(diags,class_diag(probs,truth))
+#}
+#apply(diags2,2,mean)
+
+#Based on using lambda instead of lambda.1se, I got that the two first variables to get values as I scrolled down were unemployment proportion and non-citizen proportion.
+#I did this because lambda.1se gave me no variables with values except the variable that I turned into the binary variable being predicted.
+#This cross-validation gave a terribly low AUC, which gave me half of chance with the accuracy being marginally worse than the original cross-validation. 
+```
+
+
+
+
+
+
+

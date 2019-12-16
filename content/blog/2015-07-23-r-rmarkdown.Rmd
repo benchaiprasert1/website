@@ -1,0 +1,11 @@
+---
+title: "Projects"
+author: "Ben Chaiprasert"
+date: 2015-07-23T21:13:14-05:00
+categories: ["R"]
+tags: ["R", "project", "SDS 348"]
+---
+
+[Project 1-1](../../Project1-1)
+
+[Project 2](../../Project2)

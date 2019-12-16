@@ -1,0 +1,468 @@
+---
+title: 'Project 2: Modeling, Testing, and Predicting by Ben Chaiprasert (bc32544)'
+author: "SDS348 Fall 2019"
+date: ''
+output:
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+  pdf_document:
+    toc: yes
+---
+
+
+
+<div id="modeling" class="section level1">
+<h1>Modeling</h1>
+<div id="instructions" class="section level2">
+<h2>Instructions</h2>
+<p>A knitted R Markdown document (as a PDF) and the raw R Markdown file (as .Rmd) should both be submitted to Canvas by 11:59pm on 11/24/2019. These two documents will be graded jointly, so they must be consistent (i.e., don’t change the R Markdown file without also updating the knitted document). Knit an html copy too, for later! In the .Rmd file for Project 2, you can copy the first code-chunk into your project .Rmd file to get better formatting. Notice that you can adjust the opts_chunk$set(…) above to set certain parameters if necessary to make the knitting cleaner (you can globally set the size of all plots, etc). I have gone ahead and set a few for you (such as disabling warnings and package-loading messges when knitting)!</p>
+<p>Like before, I envision your written text forming something of a narrative structure around your code/output. All results presented must have corresponding code. Any answers/results/plots etc. given without the corresponding R code that generated the result will not be graded. Furthermore, all code contained in your final project document should work properly. Please do not include any extraneous code or code which produces error messages. (Code which produces warnings is acceptable, as long as you understand what the warnings mean).</p>
+</div>
+<div id="find-data" class="section level2">
+<h2>Find data:</h2>
+<p>Find one dataset with at least 5 variables that wish to use to build model. At least one should be categorical (with 2-5 groups) and at least two should be numeric. Ideally, one of your variables will be binary (if not, you will need to create one by discretizing a numeric, which is workable but less than ideal). You will need a minimum of 40 observations (<em>at least</em> 10 observations for every explanatory variable you have, ideally 20+ observations/variable).</p>
+<p>It is perfectly fine to use either dataset (or the merged dataset, or a subset of your variables) from Project 1. However, you could also diversify your portfolio a bit by choosing a different dataset to work with (particularly if the variables did not reveal interesting associations in Project 1). The only requirement/restriction is that you may not use data from any examples we have done in class or lab. It would be a good idea to pick more cohesive data this time around (i.e., variables that you actually thing might have a relationship you would want to test). Think more along the lines of your Biostats project.</p>
+<p>Again, you can use data from anywhere you want (see bottom for resources)! If you want a quick way to see whether a built-in (R) dataset has binary and/or character (i.e., categorical) variables, check out this list: <a href="https://vincentarelbundock.github.io/Rdatasets/datasets.html" class="uri">https://vincentarelbundock.github.io/Rdatasets/datasets.html</a>.</p>
+<pre class="r"><code>class_diag&lt;-function(probs,truth){
+ tab&lt;-table(factor(probs&gt;.5,levels=c(&quot;FALSE&quot;,&quot;TRUE&quot;)),truth)
+ acc=sum(diag(tab))/sum(tab)
+ sens=tab[2,2]/colSums(tab)[2]
+ spec=tab[1,1]/colSums(tab)[1]
+ ppv=tab[2,2]/rowSums(tab)[2]
+ if(is.numeric(truth)==FALSE &amp; is.logical(truth)==FALSE) truth&lt;-as.numeric(truth)-1
+
+ ord&lt;-order(probs, decreasing=TRUE)
+ probs &lt;- probs[ord]; truth &lt;- truth[ord]
+ TPR=cumsum(truth)/max(1,sum(truth))
+ FPR=cumsum(!truth)/max(1,sum(!truth))
+ dup&lt;-c(probs[-1]&gt;=probs[-length(probs)], FALSE)
+ TPR&lt;-c(0,TPR[!dup],1); FPR&lt;-c(0,FPR[!dup],1)
+ n &lt;- length(TPR)
+ auc&lt;- sum( ((TPR[-1]+TPR[-n])/2) * (FPR[-1]-FPR[-n]) )
+ data.frame(acc,sens,spec,ppv,auc)
+} 
+library(fivethirtyeight)
+library(plotROC)
+library(dplyr)
+library(MASS)
+library(lmtest)
+library(boot)
+library(glmnet)
+library(ggplot2)
+library(sandwich)
+hate_crimes &lt;- view(hate_crimes)</code></pre>
+</div>
+<div id="guidelines-and-rubric" class="section level2">
+<h2>Guidelines and Rubric</h2>
+<ul>
+<li><strong>0. (5 pts)</strong> Introduce your dataset and each of your variables (or just your main variables if you have lots) in a paragraph.</li>
+</ul>
+<p><em>I selected a dataset depicting the rate of hate crimes across the states in the United States along with other data that could be correlated to hate crime rate. State and state_abbrev are exactly as they say they are. Median_house_inc is median household income, while all the share variables are share of the population that is inserted at the end of the variable name. For example, share_pop_metro is the share of the population that lives in a metropolitan area. Gini_index is simply the gini index for that state. Hate_crimes_per_100k_splc is hate crimes occurence per 100,000 population, and avg_hatecrimes_per_100k_fbi is the average annual hate crimes per 100,000 population according to FBI data collected in 2010-2015.</em></p>
+<ul>
+<li><strong>1. (15 pts)</strong> Perform a MANOVA testing whether any of your numeric variables (or a subset of them, if including them all doesn’t make sense) show a mean difference across levels of one of your categorical variables (3). If they do, perform univariate ANOVAs to find response(s) showing a mean difference across groups (3), and perform post-hoc t tests to find which groups differ (3). Discuss the number of tests you have performed, calculate the probability of at least one type I error (if unadjusted), and adjust the significance level accordingly (bonferroni correction) before discussing significant differences (3). Briefly discuss assumptions and whether or not they are likely to have been met (2).</li>
+</ul>
+<pre class="r"><code>hate_crimes &lt;- hate_crimes%&gt;% na.omit
+hate_crimes$highcr &lt;- ifelse(hate_crimes$avg_hatecrimes_per_100k_fbi &gt; 2.367613, 1, 0)
+
+ggplot(hate_crimes, aes(x = share_non_citizen, y = share_vote_trump)) +
+  geom_point(alpha = .5) + geom_density_2d(h=2) + coord_fixed() + facet_wrap(~highcr)</code></pre>
+<p><img src="/Project2_files/figure-html/unnamed-chunk-2-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>ggplot(hate_crimes, aes(x = share_pop_hs, y = gini_index)) +
+  geom_point(alpha = .5) + geom_density_2d(h=2) + coord_fixed() + facet_wrap(~highcr)</code></pre>
+<p><img src="/Project2_files/figure-html/unnamed-chunk-2-2.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>#based on these graphs of some variables, I think the assumption of multivariate normality is met
+
+covmats&lt;-hate_crimes%&gt;%na.omit%&gt;%group_by(highcr)%&gt;%do(covs=cov(.[3:11]))
+for(i in 1:3){print(covmats$covs[i])}</code></pre>
+<pre><code>## [[1]]
+## median_house_inc share_unemp_seas share_pop_metro
+share_pop_hs
+## median_house_inc 8.655365e+07 -4.556604e+01 1.420373e+02
+2.195071e+02
+## share_unemp_seas -4.556604e+01 1.024872e-04 2.430769e-04
+-1.831111e-04
+## share_pop_metro 1.420373e+02 2.430769e-04 2.320000e-02
+-1.654487e-03
+## share_pop_hs 2.195071e+02 -1.831111e-04 -1.654487e-03
+1.078840e-03
+## share_non_citizen 3.425500e+01 2.820513e-05 2.969231e-03
+-2.882479e-04
+## share_white_poverty -1.611199e+02 4.790598e-05
+-1.170513e-03 -2.913105e-04
+## gini_index -8.386071e+01 6.624786e-05 1.037051e-03
+-4.184715e-04
+## share_non_white -1.472885e+02 6.587179e-04 1.308077e-02
+-2.484829e-03
+## share_vote_trump -5.039218e+02 1.620085e-04
+-4.147436e-03 -9.924217e-04
+## share_non_citizen share_white_poverty gini_index
+share_non_white
+## median_house_inc 3.425500e+01 -1.611199e+02
+-8.386071e+01 -1.472885e+02
+## share_unemp_seas 2.820513e-05 4.790598e-05 6.624786e-05
+6.587179e-04
+## share_pop_metro 2.969231e-03 -1.170513e-03 1.037051e-03
+1.308077e-02
+## share_pop_hs -2.882479e-04 -2.913105e-04 -4.184715e-04
+-2.484829e-03
+## share_non_citizen 7.564103e-04 -2.277778e-04
+1.404701e-04 2.985897e-03
+## share_white_poverty -2.277778e-04 4.524217e-04
+9.578348e-05 -7.799145e-04
+## gini_index 1.404701e-04 9.578348e-05 2.497806e-04
+1.168761e-03
+## share_non_white 2.985897e-03 -7.799145e-04 1.168761e-03
+2.253333e-02
+## share_vote_trump -1.007265e-03 1.166097e-03 9.095442e-05
+-3.188889e-03
+## share_vote_trump
+## median_house_inc -5.039218e+02
+## share_unemp_seas 1.620085e-04
+## share_pop_metro -4.147436e-03
+## share_pop_hs -9.924217e-04
+## share_non_citizen -1.007265e-03
+## share_white_poverty 1.166097e-03
+## gini_index 9.095442e-05
+## share_non_white -3.188889e-03
+## share_vote_trump 8.197721e-03
+##
+## [[1]]
+## median_house_inc share_unemp_seas share_pop_metro
+share_pop_hs
+## median_house_inc 6.710478e+07 -3.003804e+00
+693.951764706 1.302269e+02
+## share_unemp_seas -3.003804e+00 1.045882e-04 0.001017647
+-1.836078e-04
+## share_pop_metro 6.939518e+02 1.017647e-03 0.029894118
+-1.226471e-03
+## share_pop_hs 1.302269e+02 -1.836078e-04 -0.001226471
+1.023663e-03
+## share_non_citizen 1.209390e+02 2.052941e-04 0.004594118
+-3.913725e-04
+## share_white_poverty -2.070965e+02 2.980392e-05
+-0.002041176 -5.415033e-04
+## gini_index 4.526767e+01 1.705882e-04 0.002461176
+-3.706078e-04
+## share_non_white 3.884505e+02 1.080196e-03 0.018876471
+-2.345654e-03
+## share_vote_trump -7.527054e+02 -6.825490e-04
+-0.015852941 -1.994444e-04
+## share_non_citizen share_white_poverty gini_index
+share_non_white
+## median_house_inc 1.209390e+02 -2.070965e+02
+45.2676666667 388.450457516
+## share_unemp_seas 2.052941e-04 2.980392e-05 0.0001705882
+0.001080196
+## share_pop_metro 4.594118e-03 -2.041176e-03 0.0024611765
+0.018876471
+## share_pop_hs -3.913725e-04 -5.415033e-04 -0.0003706078
+-0.002345654
+## share_non_citizen 1.141176e-03 -3.666667e-04
+0.0004964706 0.004619608
+## share_white_poverty -3.666667e-04 8.653595e-04
+-0.0001178431 -0.001551634
+## gini_index 4.964706e-04 -1.178431e-04 0.0007050588
+0.002685490
+## share_non_white 4.619608e-03 -1.551634e-03 0.0026854902
+0.022676144
+## share_vote_trump -3.237255e-03 2.447712e-03
+-0.0024484314 -0.014760458
+## share_vote_trump
+## median_house_inc -7.527054e+02
+## share_unemp_seas -6.825490e-04
+## share_pop_metro -1.585294e-02
+## share_pop_hs -1.994444e-04
+## share_non_citizen -3.237255e-03
+## share_white_poverty 2.447712e-03
+## gini_index -2.448431e-03
+## share_non_white -1.476046e-02
+## share_vote_trump 1.839771e-02
+##
+## [[1]]
+## NULL</code></pre>
+<pre class="r"><code>#I think the assumptions of homogeneity of variances is met 
+
+man1&lt;-manova(cbind(median_house_inc, share_unemp_seas, share_pop_metro, gini_index, share_pop_hs, share_non_citizen, share_white_poverty, share_vote_trump)~highcr, data=hate_crimes)
+summary(man1)</code></pre>
+<pre><code>## Df Pillai approx F num Df den Df Pr(&gt;F)
+## highcr 1 0.30595 1.9837 8 36 0.07704 .
+## Residuals 43
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1</code></pre>
+<pre class="r"><code>summary.aov(man1)</code></pre>
+<pre><code>## Response median_house_inc :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## highcr 1 156600192 156600192 1.9857 0.166
+## Residuals 43 3391176051 78864559
+##
+## Response share_unemp_seas :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## highcr 1 0.0000385 3.8533e-05 0.373 0.5446
+## Residuals 43 0.0044427 1.0332e-04
+##
+## Response share_pop_metro :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## highcr 1 0.04332 0.043320 1.676 0.2024
+## Residuals 43 1.11140 0.025847
+##
+## Response gini_index :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## highcr 1 0.0007433 0.00074335 1.7296 0.1954
+## Residuals 43 0.0184803 0.00042977
+##
+## Response share_pop_hs :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## highcr 1 0.001475 0.0014747 1.3951 0.244
+## Residuals 43 0.045452 0.0010570
+##
+## Response share_non_citizen :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## highcr 1 0.003853 0.0038533 4.2413 0.04554 *
+## Residuals 43 0.039067 0.0009085
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1
+##
+## Response share_white_poverty :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## highcr 1 0.0002904 0.00029037 0.4716 0.4959
+## Residuals 43 0.0264741 0.00061568
+##
+## Response share_vote_trump :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## highcr 1 0.04668 0.046676 3.8164 0.05728 .
+## Residuals 43 0.52590 0.012230
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1</code></pre>
+<pre class="r"><code>#the manova test shows that means for each group in the test are not significantly different across high vs low crime rate areas
+#since the manova test didn&#39;t find significant differences across groups, I only performed one test meaning the probabilitiy of a Type 1 error is 0.05/1 which is still 0.05. The significance of the values doesn&#39;t change because the bonferroni correction didn&#39;t change the alpha value. </code></pre>
+<p><em>A one-way multivariate analysis of variance (MANOVA) was conducted to determine the effect of the high hate crime rate (high and low) on several dependent variables (median household income, unemployed population proportion, proportion of the population living in a metropolitian area, proportion of population 25+ with a high-school degree, amount of non-citizens, gini index and proportion of non-white individuals). Examination of bivariate density plots for each group revealed no stark deparures from multivariate normality. Examination of covariance matricies for each group revealed relative homogeneity. No univariate or multivariate outliers were evident and MANOVA was considered to be an appropriate analysis technique. No significant differences were found across high vs low crime rate areas. </em></p>
+<ul>
+<li><strong>2. (10 pts)</strong> Perform some kind of randomization test on your data (that makes sense). This can be anything you want! State null and alternative hypotheses, perform the test, and interpret the results (7). Create a plot visualizing the null distribution and the test statistic (3).</li>
+</ul>
+<pre class="r"><code>hate_crimes%&gt;%na.omit%&gt;%group_by(highcr)%&gt;%summarize(s=sd(gini_index))%&gt;%summarize(diff(s))</code></pre>
+<pre><code>## # A tibble: 1 x 1
+##   `diff(s)`
+##       &lt;dbl&gt;
+## 1    0.0107</code></pre>
+<pre class="r"><code>rand_dist&lt;-vector()
+for(i in 1:5000){
+new&lt;-data.frame(gini_index=sample(hate_crimes$gini_index),highcr=hate_crimes$highcr)
+rand_dist[i]&lt;-sd(new[new$highcr==&quot;1&quot;,]$gini_index)-
+ sd(new[new$highcr==&quot;0&quot;,]$gini_index)
+}
+mean(rand_dist&lt; 0.01074849)*2</code></pre>
+<pre><code>## [1] 1.89</code></pre>
+<pre class="r"><code>#Ho = gini index is the same for whether the area was high hate crime rate vs low hate crime rate
+#Ha = gini index is different for whether the area was high hate crime rate vs low hate crime rate
+ 
+hist(rand_dist,main=&quot;kajdsfl&quot;,ylab=&quot;asdfaf&quot;); abline(v = 0.01074849,col=&quot;red&quot;)</code></pre>
+<p><img src="/Project2_files/figure-html/unnamed-chunk-3-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>#based on the results shown in the graph, the null is rejected since a majority of the graph lies below the red line which is the p-value line</code></pre>
+<ul>
+<li><strong>3. (35 pts)</strong> Build a linear regression model predicting one of your response variables from at least 2 other variables, including their interaction. Mean-center any numeric variables involved in the interaction.</li>
+</ul>
+<pre class="r"><code>hate_crimes_centered &lt;- hate_crimes %&gt;% na.omit %&gt;% mutate(ginicenter = gini_index - mean(gini_index), unempcenter = share_unemp_seas - mean(share_unemp_seas), hccenter = avg_hatecrimes_per_100k_fbi- mean(avg_hatecrimes_per_100k_fbi))
+
+
+fitint &lt;- lm(hccenter~ginicenter*unempcenter, data= hate_crimes_centered)
+summary(fitint)</code></pre>
+<pre><code>##
+## Call:
+## lm(formula = hccenter ~ ginicenter * unempcenter, data =
+hate_crimes_centered)
+##
+## Residuals:
+## Min 1Q Median 3Q Max
+## -2.422 -1.089 -0.128 1.020 2.628
+##
+## Coefficients:
+## Estimate Std. Error t value Pr(&gt;|t|)
+## (Intercept) -0.3280 0.2204 -1.488 0.144356
+## ginicenter 27.8058 11.8308 2.350 0.023652 *
+## unempcenter 21.1664 24.8372 0.852 0.399052
+## ginicenter:unempcenter 3314.3892 907.6760 3.652 0.000731
+***
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1
+##
+## Residual standard error: 1.35 on 41 degrees of freedom
+## Multiple R-squared: 0.4249, Adjusted R-squared: 0.3829
+## F-statistic: 10.1 on 3 and 41 DF, p-value: 4.145e-05</code></pre>
+<pre class="r"><code>#42.49% of the variation is explained by the interaction model 
+
+resids&lt;-fitint$residuals
+fitted&lt;-fitint$fitted.values
+
+qplot(x = ginicenter, y = hccenter, color = unempcenter, data = hate_crimes_centered) +
+  stat_smooth(method = &quot;lm&quot;, se = FALSE, fullrange = TRUE)</code></pre>
+<p><img src="/Project2_files/figure-html/unnamed-chunk-4-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>ggplot()+geom_point(aes(fitted,resids))+geom_hline(yintercept=0, color=&#39;red&#39;)</code></pre>
+<p><img src="/Project2_files/figure-html/unnamed-chunk-4-2.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>ggplot()+geom_qq(aes(sample=resids))+geom_qq_line()</code></pre>
+<p><img src="/Project2_files/figure-html/unnamed-chunk-4-3.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>ggplot()+geom_histogram(aes(resids), bins=20)</code></pre>
+<p><img src="/Project2_files/figure-html/unnamed-chunk-4-4.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>#assumptions met
+
+coeftest(fitint, vcov=vcovHC(fitint))[,1:2]</code></pre>
+<pre><code>##                           Estimate   Std. Error
+## (Intercept)              -0.327992    0.3024533
+## ginicenter               27.805847   22.6426837
+## unempcenter              21.166388   44.1868037
+## ginicenter:unempcenter 3314.389155 4024.9407015</code></pre>
+<pre class="r"><code>#this resulted in the same coefficients as the first model, but the standard errors were wildly different with this new model drastically increasing for the interaction effect 
+
+fit&lt;-lm(hccenter~ginicenter+unempcenter, data= hate_crimes_centered)
+summary(fit)</code></pre>
+<pre><code>##
+## Call:
+## lm(formula = hccenter ~ ginicenter + unempcenter, data =
+hate_crimes_centered)
+##
+## Residuals:
+## Min 1Q Median 3Q Max
+## -2.4431 -1.1214 -0.0351 1.0166 5.5295
+##
+## Coefficients:
+## Estimate Std. Error t value Pr(&gt;|t|)
+## (Intercept) 1.372e-15 2.289e-01 0.000 1.00000
+## ginicenter 4.277e+01 1.262e+01 3.388 0.00154 **
+## unempcenter -1.318e+01 2.615e+01 -0.504 0.61683
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1
+##
+## Residual standard error: 1.536 on 42 degrees of freedom
+## Multiple R-squared: 0.2379, Adjusted R-squared: 0.2016
+## F-statistic: 6.556 on 2 and 42 DF, p-value: 0.003326</code></pre>
+<pre class="r"><code>#the model without interaction has a lot of difference in coefficients since the interaction model attributed a lot of the variance to the interaction effect </code></pre>
+<pre><code>- Interpret the coefficient estimates (do not discuss significance) (10)
+- Plot the regression using `ggplot()`. If your interaction is numeric by numeric, refer to code near the end of WS15 to make the plot. If you have 3 or more predictors, just chose two to plot for convenience. (7)
+- Check assumptions of linearity, normality, and homoskedasticity either graphically or using a hypothesis test (3)
+- Regardless, recompute regression results with robust standard errors via `coeftest(..., vcov=vcovHC(...))`. Discuss significance of results, including any changes from before/after robust SEs if applicable. (7)
+- What proportion of the variation in the outcome does your model explain? (3)
+- Finally, rerun the regression but without interactions (just main effects); compare this with the interaction model and the null model using a likelihood ratio test (4)</code></pre>
+<ul>
+<li><strong>4. (5 pts)</strong> Rerun same regression model (with interaction), but this time compute bootstrapped standard errors. Discuss any changes you observe in SEs and p-values using these SEs compared to the original SEs and the robust SEs)</li>
+</ul>
+<pre class="r"><code>resid_resamp&lt;-replicate(5000,{
+  new_resids&lt;-sample(resids,replace=TRUE) #resample resids w/ replacement
+  hate_crimes_centered$new_y&lt;-fitted+new_resids #add new resids to yhats to get new &quot;data&quot;
+  fitnew&lt;-lm(new_y~ginicenter*unempcenter,data=hate_crimes_centered) #refit model
+  coef(fitnew) #save coefficient estimates (b0, b1, etc)
+})
+
+resid_resamp%&gt;%t%&gt;%as.data.frame%&gt;%summarize_all(sd)</code></pre>
+<pre><code>## (Intercept) ginicenter unempcenter
+ginicenter:unempcenter
+## 1 0.2100296 11.34434 23.67983 872.0801</code></pre>
+<p><em>the bootstrapped SE’s are different from the original and robust SE’s though not by a huge margin. Interestingly, the bootstrapped SE’s fall between the original SE’s and robust SE’s. </em></p>
+<ul>
+<li><p><strong>5. (40 pts)</strong> Perform a logistic regression predicting a binary categorical variable (if you don’t have one, make/get one) from at least two explanatory variables (interaction not necessary).</p>
+<ul>
+<li>Interpret coefficient estimates in context (10)</li>
+<li>Report a confusion matrix for your logistic regression (2)</li>
+<li>Compute and discuss the Accuracy, Sensitivity (TPR), Specificity (TNR), and Recall (PPV) of your model (5)</li>
+<li>Using ggplot, plot density of log-odds (logit) by your binary outcome variable (3)</li>
+<li>Generate an ROC curve (plot) and calculate AUC (either manually or with a package); interpret (10)</li>
+<li>Perform 10-fold (or repeated random sub-sampling) CV and report average out-of-sample Accuracy, Sensitivity, and Recall (10)</li>
+</ul></li>
+</ul>
+<pre class="r"><code>#fitlm &lt;- lm(formula = highcr ~ share_unemp_seas+share_vote_trump, data = hate_crimes, #family=binomial(link=&quot;logit&quot;))
+#summary(fitlm)
+#If an area has a 0% of unemployment and trump voters, then odds of the area being a high hate crime area is 3.861285
+#Every one-unit increase in proportion of unemployed multiplies the odds of the area being a high hate crime area by 0.001806074
+#Every one-unit increase in proportion of trump voters multiplies the odds of the area being a high hate crime area by 0.2707119
+
+#hate_crimes$prob&lt;-predict(fitlm,type=&quot;response&quot;) 
+#table(predict=as.numeric(hate_crimes$prob&gt;.5),truth=hate_crimes$highcr)%&gt;%addmargins
+
+8/18</code></pre>
+<pre><code>## [1] 0.4444444</code></pre>
+<pre class="r"><code>#sensitivity is 0.4444, which is very low 
+23/27</code></pre>
+<pre><code>## [1] 0.8518519</code></pre>
+<pre class="r"><code>#specificity is 0.8519, which is very high compared to the true positive rate
+8/12</code></pre>
+<pre><code>## [1] 0.6666667</code></pre>
+<pre class="r"><code>#precision is 0.6667
+31/45</code></pre>
+<pre><code>## [1] 0.6888889</code></pre>
+<pre class="r"><code>#accuracy is 0.6889
+#overall the model doesn&#39;t perform horribly in terms of prediction as the specificity and accuracy are fine; however, the true positive rate leaves something to be desired
+
+#ROCplot&lt;-ggplot(hate_crimes)+geom_roc(aes(d=highcr,m=prob), n.cuts=0) 
+#ROCplot
+#calc_auc(ROCplot)
+#Based on the AUC value of 0.6893004, the model predicts poorly and not much better than chance which is 0.5
+
+#hate_crimes$logit&lt;-predict(fitlm,family=binomial(link=&quot;logit&quot;))
+
+#ggplot(hate_crimes)+geom_density(aes(logit,color=highcr, fill=highcr), alpha=.4)+
+  #theme(legend.position=c(.8,2))+geom_vline(xintercept=0)+xlab(&quot;predictor (logit)&quot;)
+
+#class_diag(hate_crimes$prob,hate_crimes$highcr)
+
+#set.seed(1234)
+#k=10 
+#data1&lt;-hate_crimes[sample(nrow(hate_crimes)),] 
+#folds&lt;-cut(seq(1:nrow(hate_crimes)),breaks=k,labels=F) 
+#diags&lt;-NULL
+#for(i in 1:k){
+ 
+ #train&lt;-data1[folds!=i,]
+ #test&lt;-data1[folds==i,]
+ #truth&lt;-test$highcr
+ 
+ #fitcv&lt;-glm(highcr~share_unemp_seas+share_vote_trump,data=train,family=&quot;binomial&quot;)
+ #probs&lt;-predict(fitcv,newdata = test,type=&quot;response&quot;)
+
+ #diags&lt;-rbind(diags,class_diag(probs,truth))
+#}
+
+#apply(diags,2,mean) 
+#accuracy is 0.645
+#sensitivity is 0.350
+#specificity is 0.85
+#AUC is 0.625</code></pre>
+<ul>
+<li><strong>6. (10 pts)</strong> Choose one variable you want to predict (can be one you used from before; either binary or continuous) and run a LASSO regression inputting all the rest of your variables as predictors. Choose lambda to give the simplest model whose accuracy is near that of the best (i.e., <code>lambda.1se</code>). Discuss which variables are retained. Perform 10-fold CV using this model: if response in binary, compare model’s out-of-sample accuracy to that of your logistic regression in part 5; if response is numeric, compare the residual standard error (at the bottom of the summary output, aka RMSE): lower is better fit!</li>
+</ul>
+<pre class="r"><code>#y&lt;-as.matrix(hate_crimes$highcr)
+#x&lt;-hate_crimes%&gt;%dplyr::select(median_house_inc, share_unemp_seas, share_pop_metro, share_pop_hs, share_non_citizen, share_white_poverty, share_non_white, share_vote_trump, gini_index, hate_crimes_per_100k_splc, avg_hatecrimes_per_100k_fbi)%&gt;%mutate_all(scale)%&gt;%as.matrix
+#cv&lt;-cv.glmnet(x,y) 
+#lasso1&lt;-glmnet(x,y,lambda=cv$lambda)
+#coef(lasso1)
+
+#class_diag(hate_crimes$prob,hate_crimes$highcr)
+
+#set.seed(1234)
+#k=10 
+#data2&lt;-hate_crimes[sample(nrow(hate_crimes)),] 
+#folds&lt;-cut(seq(1:nrow(hate_crimes)),breaks=k,labels=F) 
+#diags&lt;-NULL
+#for(i in 1:k){
+ 
+ #train2&lt;-data2[folds!=i,]
+ #test2&lt;-data2[folds==i,]
+ #truth&lt;-test2$highcr
+ 
+ #fitcvl&lt;-glm(highcr~share_unemp_seas+share_non_citizen,data=train,family=&quot;binomial&quot;)
+ #probs&lt;-predict(fitcvl,newdata = test2,type=&quot;response&quot;)
+
+ #diags2&lt;-rbind(diags,class_diag(probs,truth))
+#}
+#apply(diags2,2,mean)
+
+#Based on using lambda instead of lambda.1se, I got that the two first variables to get values as I scrolled down were unemployment proportion and non-citizen proportion.
+#I did this because lambda.1se gave me no variables with values except the variable that I turned into the binary variable being predicted.
+#This cross-validation gave a terribly low AUC, which gave me half of chance with the accuracy being marginally worse than the original cross-validation. </code></pre>
+</div>
+</div>

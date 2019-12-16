@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Posts on Ben Chaiprasert</title>
+    <link>/post/</link>
+    <description>Recent content in Posts on Ben Chaiprasert</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-US</language>
+    <lastBuildDate>Sun, 15 Dec 2019 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="/post/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>What I Liked about Python</title>
+      <link>/2019/12/15/what-i-liked-about-python/</link>
+      <pubDate>Sun, 15 Dec 2019 00:00:00 +0000</pubDate>
+      
+      <guid>/2019/12/15/what-i-liked-about-python/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>
